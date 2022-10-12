@@ -20,14 +20,14 @@ API Token needs these permissions:
 - `entities.read (Read entities)`
 - `ExternalSyntheticIntegration (Create and read synthetic monitors, locations, and nodes)`
 
-## Create Endpoints Folder
+## Create `.dynatrace` Folder
 1) Create a folder called `.dynatrace` at the root of your repo
 2) Create a file called `config.json` in `.dynatrace` folder
 3) Commit your files to the `.dynatrace` folder (see supported file formats below)
 4) Add the action to your Git Action workflow
 
 ## Add Endpoints
-Inside `.dynatrace` create one or more `.txt` files listing your URLs (one per line).
+Inside `.dynatrace` create one or more `.txt` files listing your URLs (one per line) (only plain `GET` requests are currently supported).
 Alternatively, place [valid sitemap.xml file(s)](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap#xml) in this folder.
 OpenAPI support is a work in progress.
 
