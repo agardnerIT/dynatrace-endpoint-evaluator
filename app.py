@@ -550,7 +550,7 @@ for execution in execution_results:
         if points < 0: points = 0
         
 
-        print(f"Points: {points}")
+        print(f"Endpoint: {step_name} Points: {points}")
 
         #print(f"{step['requestName']} had status: {status} ({step_response_status_code}) and was {step['healthStatus']}")
         results.append({
