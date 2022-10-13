@@ -45,9 +45,9 @@ jobs:
       - name: Checkout Repo
         uses: actions/checkout@v3
       
-      - name: DT Job
-        uses: TODO
-        id: dt-job
+      - name: Dynatrace Endpoint Tester
+        uses: agardnerIT/dynatrace-endpoint-evaluator@0.0.1
+        id: dt_job # Mandatory as this is how the comments are pushed to PR
         env:
           dt_environment_url: ${{ secrets.DT_ENVIRONMENT_URL }}
           dt_api_token: ${{ secrets.DT_API_TOKEN }}
