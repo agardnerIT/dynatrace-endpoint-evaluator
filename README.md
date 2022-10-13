@@ -14,7 +14,7 @@ https://google.com
 # Usage
 
 ## Create Required Secrets
-Create 2x GitHub secrets called `DT_ENVIRONMENT_URL` and `DT_API_TOKEN`.
+Create 2x GitHub Action secrets called `DT_ENVIRONMENT_URL` and `DT_API_TOKEN`.
 
 Where
 - `DT_ENVIRONMENT_URL` looks like: `https://abc12345.live.dynatrace.com`
