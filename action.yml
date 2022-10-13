@@ -4,3 +4,7 @@ description: |
 runs:
   using: docker
   image: Dockerfile
+
+branding:
+  icon: arrow-right
+  color: purple
