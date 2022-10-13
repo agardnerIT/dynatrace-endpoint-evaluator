@@ -118,7 +118,7 @@ except:
     exit(1)
 
 try:
-    default_root_url = config_file_json['defaultRootURL']
+    default_root_url = config_file_json['defaultRootUrl']
     default_locations = config_file_json['defaultLocations']
 except:
     print("Missing .dynatrace/config.json parameters. Cannot proceed. Exiting. Please see https://github.com/agardnerIT/dynatrace-endpoint-evaluator/blob/main/README.md")
