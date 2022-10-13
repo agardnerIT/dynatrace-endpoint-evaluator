@@ -350,12 +350,14 @@ while True:
     # If batch failed, exit immediately
     batch_status = get_batch_response_json['batchStatus']
     if batch_status == "NOT_TRIGGERED" or batch_status == "FAILED" or batch_status == "FAILED_TO_EXECUTE":
+        print(f"Batch failed with status: {batch_status}")
         break
 
     #print(f"Get Batch Response JSON: {get_batch_response_json}")
 
     if get_batch_response_json['triggeringProblemsCount'] == 0:
         # Everything triggered correctly. Breaking from loop.
+        print(f"Batch: Everything triggered fine. Breaking from loop.")
         break
     else: # Problem triggering one or more synthetic tests.
         # Known potential causes:
@@ -364,11 +366,12 @@ while True:
         triggering_problems = get_batch_response_json['triggeringProblems']
         for triggering_problem in triggering_problems:
             cause = triggering_problem['cause']
+            print(f"Triggering Problem Cause: {cause}")
             if "Monitor's configuration is being synchronized. Please try in a moment."  in cause:
                 print(f"New monitor(s) is / are still syncing. Wait and retrigger a new batch in 30s")
                 must_retrigger_batch = True
                 time.sleep(30)
-                continue
+                break
     
     print(f"Got triggering problems but must_retrigger_batch is false. Investigate. Raw output of triggering_problems: {triggering_problems}")
 
