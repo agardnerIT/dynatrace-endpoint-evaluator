@@ -1,11 +1,6 @@
 name: Dynatrace Endpoint Tester
 description: |
-  Automatically score your webpage health using Dynatrace.
-  List endpoints as code and get health results in the PR.
-  Supports:
-  1) Plain `.txt` files (one URL per line)
-  2) sitemap.xml format
-  3) Dynatrace endpoints format
+  Automatically score your webpage health using Dynatrace. List endpoints as code and get health results in the PR.
 runs:
   using: docker
   image: Dockerfile
