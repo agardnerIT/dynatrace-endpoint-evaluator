@@ -373,7 +373,8 @@ while True:
                 time.sleep(30)
                 break
     
-    print(f"Got triggering problems but must_retrigger_batch is false. Investigate. Raw output of triggering_problems: {triggering_problems}")
+    if not must_retrigger_batch:
+        print(f"Got triggering problems but must_retrigger_batch is false. Investigate. Raw output of triggering_problems: {triggering_problems}")
 
     print(f"Batch: {batch_id} is still in process. Response code: {get_batch_response.status_code}. Wait 30s and try again.")
     time.sleep(30)
