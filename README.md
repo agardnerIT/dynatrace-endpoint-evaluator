@@ -55,7 +55,7 @@ OpenAPI support is a work in progress.
 Create a workflow in `.github/workflows/dynatrace-endpoint-checker.yml`
 
 ```
-on: [push, pull_request]
+on: [pull_request]
 
 jobs:
   dt_job:
