@@ -26,6 +26,22 @@ API Token needs these permissions:
 3) Commit your files to the `.dynatrace` folder (see supported file formats below)
 4) Add the action to your Git Action workflow
 
+## Populate `.dynatrace/config.json`
+
+**This file and these parameters are mandatory.**
+
+`defaultRootUrl` is prepended when only paths are given. If a full URL is given in the input files, this is ignored. This means you can list relative urls and the script will automatically format as `defaultRootUrl+YourListedPath`. In this case: `https://example.com/YourPath`.
+
+`defaultLocations` is an array of `GEOLOCATION` objects from where you want to run your synthetic tests.
+
+**Example `.dynatrace/config.json` file**
+```
+{
+  "defaultRootUrl": "https://example.com",
+  "defaultLocations": ["GEOLOCATION-E01B833216FC3598"]
+}
+```
+
 ## Add Endpoints
 Inside `.dynatrace` create one or more `.txt` files listing your URLs (one per line) (only plain `GET` requests are currently supported).
 Alternatively, place [valid sitemap.xml file(s)](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap#xml) in this folder.

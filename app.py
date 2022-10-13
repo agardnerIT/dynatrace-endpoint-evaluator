@@ -106,10 +106,8 @@ def parse(filename):
                 for path in json_file['paths']:
                     #url += path['path']
                     url_string_list.append(ensure_full_url(path['path']))
-
             else:
                 print(f"Parsing JSON file but {filename} is currently an unsupported format")
-
 
 ####################
 # Start main logic #
@@ -123,19 +121,26 @@ try:
     with open(f"{directory_to_scan}/{config_file_name}") as config_file:
       config_file_json = json.load(config_file)
 except:
-    print(f"{directory_to_scan}/{config_file_name} is missing. Cannot proceed. Please fix. Exiting...")
+    print(f"{directory_to_scan}/{config_file_name} is missing or empty. .dynatrace/config.json must exist and have defaultRootURL and a defaultLocations array. Cannot proceed. Please fix. Exiting...")
     exit(1)
 
-print(os.environ)
+try:
+    default_root_url = config_file_json['defaultRootURL']
+    default_locations = config_file_json['defaultLocations']
+except:
+    print("Missing .dynatrace/config.json parameters. Cannot proceed. Exiting. Please see https://github.com/agardnerIT/dynatrace-endpoint-evaluator/blob/main/README.md")
+    exit(1)
 
-default_root_url = config_file_json['defaultRootURL']
-default_locations = config_file_json['defaultLocations']
 dt_environment_url = os.getenv("dt_environment_url","")
 dt_api_token = os.getenv("dt_api_token","")
 
 if dt_environment_url == "" or dt_api_token == "":
     print("DT_ENVIRONMENT_URL and / or DT_API_TOKEN is missing. Please create Git Action secrets for these. Cannot proceed. Exiting.")
     exit(1)
+
+# Trim trailing slash from environment url if present
+if dt_environment_url.endswith("/"):
+    dt_environment_url = dt_environment_url[:-1]
 
 file_list = os.scandir(directory_to_scan)
 url_string_list = []
@@ -144,14 +149,15 @@ for file_or_dir in file_list:
     if os.path.isfile(file_or_dir.path): parse(file_or_dir.path)
 
 print("All done processing files. Printing master list...")
-print(len(url_string_list))
+
 # Create a dictionary, using the List items as keys.
 # This will automatically remove any duplicates because dictionaries cannot have duplicate keys.
 url_string_list = list( dict.fromkeys(url_string_list) )
-print("----")
-print("Reprinting de-duped list")
-print(len(url_string_list))
 print(f"Will test the following URLs: {url_string_list}")
+
+if len(url_string_list) < 1:
+    print("Got no URLs to test. Are you sure you added files to the .dynatrace folder it your repo? Cannot proceed. Exiting.")
+    exit(0)
 
 # Test URLs
 # Just because the URLs are in the "to test" list, doesn't mean
@@ -382,7 +388,7 @@ for triggered_entry in triggered_executions:
     print(f"Got triggered_monitor_id: {triggered_monitor_id}")
 
     matched_entry = [item for item in working_list if item['monitor_id'] == triggered_monitor_id][0]
-    #print(f"Got a matched entry: {matched_entry}. Setting the execution details on the working list")
+
     matched_entry['executions'] = triggered_entry['executions']
 
 print("-------------------")
@@ -447,19 +453,17 @@ for execution in execution_results:
     # > 3000ms = poor (-15 points)
     #
     # Be great to get number of objects loaded split by type (JS vs. CSS vs. Images etc.)
-    #
-
-
+    
     points = 100
 
     status = execution["fullResults"]["status"]
     execution_steps = execution["fullResults"]["executionSteps"]
     for step in execution_steps:
 
+        step_name = step["requestName"]
+
         # Record any reasons why we reduce the score
         score_reduction_reasons = []
-
-        print(step)
 
         is_insecure = False
         if step["requestName"].startswith("http://") or step["peerCertificateDetails"] == "":
@@ -483,29 +487,28 @@ for execution in execution_results:
         time_now = datetime.datetime.now()
         # Calculate days between now and cert_expiry
         cert_days_remaining = (cert_expiry - time_now).days
-        #print(f"Time Now: {time_now}. Expiry time: {cert_expiry}. Delta: {cert_days_remaining}")
 
         # Deduct points
         # Insecure page (http)
         if is_insecure:
-            score_reduction_reasons.append(f"Dinging {INSECURE_POINT_DEDUCTION} points because page is insecure (served over http not https)")
-            print(f"Dinging {INSECURE_POINT_DEDUCTION} points because page is insecure (served over http not https)")
+            score_reduction_reasons.append(f"Removing {INSECURE_POINT_DEDUCTION} points from {step_name} because page is insecure (served over http not https)")
+            print(f"Removing {INSECURE_POINT_DEDUCTION} points from {step_name} because page is insecure (served over http not https)")
             points -= INSECURE_POINT_DEDUCTION
 
         # Missing or error pages
         if step_response_status_code > RESPONSE_CODE_THRESHOLD:
-            score_reduction_reasons.append(f"Dinging {RESPONSE_CODE_POINT_DEDUCTION} points because response status > {RESPONSE_CODE_THRESHOLD}")
-            print(f"Dinging {RESPONSE_CODE_POINT_DEDUCTION} points because response status > {RESPONSE_CODE_THRESHOLD}")
+            score_reduction_reasons.append(f"Removing {RESPONSE_CODE_POINT_DEDUCTION} points from {step_name} because response status > {RESPONSE_CODE_THRESHOLD}")
+            print(f"Removing {RESPONSE_CODE_POINT_DEDUCTION} points from {step_name} because response status > {RESPONSE_CODE_THRESHOLD}")
             points -= RESPONSE_CODE_POINT_DEDUCTION
 
         # TTFB
         if step_ttfb > TTFB_POOR_TIME_THRESHOLD:
-            score_reduction_reasons.append(f"Dinging {TTFB_POOR_POINT_DEDUCTION} points because TTFB > {TTFB_POOR_TIME_THRESHOLD}")
-            print(f"Dinging {TTFB_POOR_POINT_DEDUCTION} points because TTFB > {TTFB_POOR_TIME_THRESHOLD}")
+            score_reduction_reasons.append(f"Removing {TTFB_POOR_POINT_DEDUCTION} points from {step_name} because TTFB > {TTFB_POOR_TIME_THRESHOLD}")
+            print(f"Removing {TTFB_POOR_POINT_DEDUCTION} points from {step_name} because TTFB > {TTFB_POOR_TIME_THRESHOLD}")
             points -= TTFB_POOR_POINT_DEDUCTION
         elif step_ttfb > TTFB_NEEDS_IMPROVEMENT_TIME_THRESHOLD:
-            score_reduction_reasons.append(f"Dinging {TTFB_NEEDS_IMPROVEMENT_POINT_DEDUCTION} points because TTFB > {TTFB_NEEDS_IMPROVEMENT_TIME_THRESHOLD}")
-            print(f"Dinging {TTFB_NEEDS_IMPROVEMENT_POINT_DEDUCTION} points because TTFB > {TTFB_NEEDS_IMPROVEMENT_TIME_THRESHOLD}")
+            score_reduction_reasons.append(f"Removing {TTFB_NEEDS_IMPROVEMENT_POINT_DEDUCTION} points from {step_name} because TTFB > {TTFB_NEEDS_IMPROVEMENT_TIME_THRESHOLD}")
+            print(f"Removing {TTFB_NEEDS_IMPROVEMENT_POINT_DEDUCTION} points from {step_name} because TTFB > {TTFB_NEEDS_IMPROVEMENT_TIME_THRESHOLD}")
             points -= TTFB_NEEDS_IMPROVEMENT_POINT_DEDUCTION
         # FCP
         # TODO
@@ -518,19 +521,17 @@ for execution in execution_results:
         # Cert days remaining
         # Only check is page isn't insecure (in which case we've already dinged and know that this check is unneccessary)
         if not is_insecure and cert_days_remaining < CERT_DAYS_REMAINING_THRESHOLD:
-            score_reduction_reasons.append(f"Dinging {CERT_INVALIDATING_SOON_POINT_DEDUCTION} points because cert days remaining ({cert_days_remaining}) < {CERT_DAYS_REMAINING_THRESHOLD}")
-            print(f"Dinging {CERT_INVALIDATING_SOON_POINT_DEDUCTION} points because cert days remaining ({cert_days_remaining}) < {CERT_DAYS_REMAINING_THRESHOLD}")
+            score_reduction_reasons.append(f"Removing {CERT_INVALIDATING_SOON_POINT_DEDUCTION} points from {step_name} because cert days remaining ({cert_days_remaining}) < {CERT_DAYS_REMAINING_THRESHOLD}")
+            print(f"Removing {CERT_INVALIDATING_SOON_POINT_DEDUCTION} points from {step_name} because cert days remaining ({cert_days_remaining}) < {CERT_DAYS_REMAINING_THRESHOLD}")
             points -= CERT_INVALIDATING_SOON_POINT_DEDUCTION
 
         # Can"t have negative points
         if points < 0: points = 0
         
-
         print(f"Points: {points}")
 
-        #print(f"{step['requestName']} had status: {status} ({step_response_status_code}) and was {step['healthStatus']}")
         results.append({
-            "url": f"{step['requestName']}",
+            "url": f"{step_name}",
             "score": points,
             "reasons": score_reduction_reasons
         })
@@ -538,7 +539,7 @@ for execution in execution_results:
     print("-----")
 
 # Build nicely formatted output table for PR comment
-table_content = "<table><tr><th>Status</th><th>URL</th><th>Score</th>"
+table_content = "<table><tr><th>Status</th><th>URL</th><th>Score</th><th>Score Reduction Reasons</th>"
 for result in results:
     score = result['score']
     status = ":white_check_mark:" # default to a green tick (all OK)
@@ -546,7 +547,7 @@ for result in results:
         status = ":x:"
     elif score < WARNING_THRESHOLD:
         status = ":warning:"
-    table_content += f"<tr><td>{status}</td><td>{result['url']}</td><td>{result['score']}%</td></tr>"
+    table_content += f"<tr><td>{status}</td><td>{result['url']}</td><td>{result['score']}%</td><td>{result['reasons']}</td></tr>"
 table_content += "</table>"
 
 # Set variable so other GitHub Actions can use the variable
