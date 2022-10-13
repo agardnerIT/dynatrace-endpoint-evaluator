@@ -68,7 +68,7 @@ jobs:
         uses: actions/checkout@v3
       
       - name: Dynatrace Endpoint Tester
-        uses: agardnerIT/dynatrace-endpoint-evaluator@0.1.0
+        uses: agardnerIT/dynatrace-endpoint-evaluator@0.1.1
         id: dt_job # Mandatory as this is how the comments are pushed to PR
         env:
           dt_environment_url: ${{ secrets.DT_ENVIRONMENT_URL }}
