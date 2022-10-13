@@ -27,15 +27,6 @@ TTFB_POOR_TIME_THRESHOLD = 1800
 TTFB_NEEDS_IMPROVEMENT_POINT_DEDUCTION = 10
 TTFB_POOR_POINT_DEDUCTION = 15
 
-# This script supports:
-# 1. sitemap.xml format files
-# 2. OpenAPI docs
-# 3. Google suggested .txt file formats (one URL per line)
-# 4. Dynatrace endpoints.json format
-
-# Usage:
-# See readme
-
 def ensure_full_url(input):
     if "http" in input or "https" in input:
         return input
@@ -106,8 +97,10 @@ def parse(filename):
                 for path in json_file['paths']:
                     #url += path['path']
                     url_string_list.append(ensure_full_url(path['path']))
+
             else:
                 print(f"Parsing JSON file but {filename} is currently an unsupported format")
+
 
 ####################
 # Start main logic #
@@ -146,18 +139,13 @@ file_list = os.scandir(directory_to_scan)
 url_string_list = []
 
 for file_or_dir in file_list:
-    if os.path.isfile(file_or_dir.path): parse(file_or_dir.path)
-
-print("All done processing files. Printing master list...")
+    if os.path.isfile(file_or_dir.path) and config_file_name not in file_or_dir.path: parse(file_or_dir.path)
 
 # Create a dictionary, using the List items as keys.
 # This will automatically remove any duplicates because dictionaries cannot have duplicate keys.
 url_string_list = list( dict.fromkeys(url_string_list) )
-print(f"Will test the following URLs: {url_string_list}")
 
-if len(url_string_list) < 1:
-    print("Got no URLs to test. Are you sure you added files to the .dynatrace folder it your repo? Cannot proceed. Exiting.")
-    exit(0)
+print(f"Will test the following URLs: {url_string_list}")
 
 # Test URLs
 # Just because the URLs are in the "to test" list, doesn't mean
@@ -170,7 +158,6 @@ for url in url_string_list:
         "executions": []
     })
 
-#working_list = url_string_list
 # Step 1: Get existing HTTP_CHECK tagged with `git-action`
 # Remove items from working_list that already exist
 headers = {
@@ -198,7 +185,6 @@ for existing_synthetic_http_check in existing_synthetics:
     if existing_name in url_string_list:
         print("Got a match. Do not need to recreate but do make a record of the monitor_id")
         found_item = [item for item in working_list if item['endpoint'] == existing_name][0]
-        print(found_item)
         print(f"Item is: {found_item} and monitor ID is: {monitor_id}")
 
         # Set the monitor id on the object
@@ -212,30 +198,10 @@ for existing_synthetic_http_check in existing_synthetics:
 #
 # Note: Executions will always be empty at this point. They will be populated later
 
-
-# monitors to trigger
-# If they are currently in Git, we trigger but may not create (they may already exist)
-monitors_to_trigger = []
-
-# Step 2: Create a new synthetic for each above
-newly_created_count = 0
-for to_be_potentially_created in working_list:
-
-    # Regardless of whether or not the monitor needs to be created
-    # If it is in Git, it needs to be triggered
-    # So build a second list to hold all monitors to be triggered
-    monitors_to_trigger.append({
-      "monitorId": to_be_potentially_created['monitor_id']
-    })
-
-    # If this item has an existing monitor_id, there is already
-    # A synthetic test in DT. Skip creation.
-    if to_be_potentially_created['monitor_id'] != "":
-        print(f"Skipping creation of: {to_be_potentially_created} as it already exists in DT...")
-        continue
-
+to_be_created_items = [item for item in working_list if item['monitor_id'] == ""]
+for to_be_created in to_be_created_items:
     body = {
-        "name": to_be_potentially_created['endpoint'],
+        "name": to_be_created['endpoint'],
 	    "frequencyMin": 0,
 	    "enabled": True,
 	    "type": "HTTP",
@@ -243,8 +209,8 @@ for to_be_potentially_created in working_list:
 	    "script": {
     		"version": "1.0",
 		    "requests": [{
-    			"description": to_be_potentially_created['endpoint'],
-			    "url": to_be_potentially_created['endpoint'],
+    			"description": to_be_created['endpoint'],
+			    "url": to_be_created['endpoint'],
 			    "method": "GET",
 			    "validation": {
     				"rules": [{
@@ -294,14 +260,39 @@ for to_be_potentially_created in working_list:
         headers=headers,
         json=body
     )
-    newly_created_count += 1
-    print(f"Creating synthetic: {to_be_potentially_created['endpoint']}...")
+    print(f"Creating synthetic: {to_be_created['endpoint']}")
     print(create_synthetic_response.status_code)
     print(create_synthetic_response.text)
 
+    if create_synthetic_response.status_code != 200:
+        print(f"Creation of synthetics failed. Response code: {create_synthetic_response.status_code}. Exiting.")
+        exit(1)
+
+    create_synthetic_response_json = create_synthetic_response.json()
+    
+    print(f"Successfully created: {create_synthetic_response_json['entityId']}")
+
+    # Set the monitor_id for this newly created entityId
+    to_be_created['monitor_id'] = create_synthetic_response_json['entityId']
+# monitors to trigger
+# If they are currently in Git, we trigger but may not create (they may already exist)
+monitors_to_trigger = []
+# Build monitors_to_trigger list
+for item in working_list:
+    monitors_to_trigger.append({
+      "monitorId": item['monitor_id']
+    })
+
+
+# Step 2: Create a new synthetic for each above
+
+print(f"-- Printing Complete List of Monitors to be Triggered (should be a complete list all with names and IDs) --")
+print(monitors_to_trigger)
+print("-----------------")
+
 # Wait for some time so synthetics are created and registered in DT
 # This is a best guess so we still need the loop below for certainty
-if newly_created_count > 0:
+if len(to_be_created_items) > 0:
     print(f"Waiting 60 seconds for synthetics to (hopefully) sync")
     time.sleep(60)
 
@@ -322,14 +313,32 @@ batch_execution_response = requests.post(
 print(f"Batch Trigger Response Code: {batch_execution_response.status_code}")
 
 batch_response_json = batch_execution_response.json()
-print(f"BRJSON: {batch_response_json}")
+#print(f"BRJSON: {batch_response_json}")
 
 batch_id = batch_response_json['batchId']
 print(f"Successfully triggered batch: {batch_id}")
 
 batch_status = ""
 
+must_retrigger_batch = False
+
 while True:
+
+    if must_retrigger_batch:
+        must_retrigger_batch = False
+        print(f"Retriggering batch (a new batch ID will be generated)...")
+        batch_execution_response = requests.post(
+            url=f"{dt_environment_url}/api/v2/synthetic/executions/batch",
+            headers=headers,
+            json=body
+        )
+        batch_response_json = batch_execution_response.json()
+        print(f"Retriggered Batch Response JSON: {batch_response_json}")
+        batch_id = batch_response_json['batchId']
+        print(f"Batch Trigger Response Code: {batch_execution_response.status_code}")
+
+        # Sleep for 30s after new batch trigger
+        time.sleep(30)    
 
     get_batch_response = requests.get(
         url=f"{dt_environment_url}/api/v2/synthetic/executions/batch/{batch_id}",
@@ -337,21 +346,33 @@ while True:
     )
 
     get_batch_response_json = get_batch_response.json()
-    print(get_batch_response_json)
 
     # If batch failed, exit immediately
     batch_status = get_batch_response_json['batchStatus']
     if batch_status == "NOT_TRIGGERED" or batch_status == "FAILED" or batch_status == "FAILED_TO_EXECUTE":
         break
 
-    print(f"Get Batch Response JSON: {get_batch_response_json}")
-    #print(f"TPC: {get_batch_response_json['triggeringProblemsCount']} is of type: {type(get_batch_response_json['triggeringProblemsCount'])}")
+    #print(f"Get Batch Response JSON: {get_batch_response_json}")
 
     if get_batch_response_json['triggeringProblemsCount'] == 0:
-        #print("++ TPC is zero. Breaking from while True")
+        # Everything triggered correctly. Breaking from loop.
         break
+    else: # Problem triggering one or more synthetic tests.
+        # Known potential causes:
+        # 1. A new monitor has just been created and is not yet synced. In which case the batch will NOT auto-trigger, so we need to take care of that
+        #    Detect that by looking at the cause in each triggeringProblems array. It will be: "Monitor's confiuguration is being synchronized. Please try in a moment."
+        triggering_problems = get_batch_response_json['triggeringProblems']
+        for triggering_problem in triggering_problems:
+            cause = triggering_problem['cause']
+            if "Monitor's configuration is being synchronized. Please try in a moment."  in cause:
+                print(f"New monitor(s) is / are still syncing. Wait and retrigger a new batch in 30s")
+                must_retrigger_batch = True
+                time.sleep(30)
+                continue
+    
+    print(f"Got triggering problems but must_retrigger_batch is false. Investigate. Raw output of triggering_problems: {triggering_problems}")
 
-    print(f"Error from DT API triggering batch: {batch_id}. {get_batch_response.status_code}. Most likely synthetic is still syncing. Wait 30s and try again.")
+    print(f"Batch: {batch_id} is still in process. Response code: {get_batch_response.status_code}. Wait 30s and try again.")
     time.sleep(30)
 
 # It is tempting to use the batch id to get details
@@ -379,7 +400,6 @@ if batch_status == "FAILED" or batch_status == "FAILED_TO_EXECUTE":
     print(f"Batch status ran but was FAILED or FAILED_TO_EXECUTE. Investigate. Exiting. Batch Status was: {batch_status}")
     exit(1)
 
-
 triggered_executions = batch_response_json['triggered']
 
 for triggered_entry in triggered_executions:
@@ -388,7 +408,6 @@ for triggered_entry in triggered_executions:
     print(f"Got triggered_monitor_id: {triggered_monitor_id}")
 
     matched_entry = [item for item in working_list if item['monitor_id'] == triggered_monitor_id][0]
-
     matched_entry['executions'] = triggered_entry['executions']
 
 print("-------------------")
@@ -397,7 +416,6 @@ print(f"Length of working list (should be equal to number of endpoints): {len(wo
 
 execution_results = []
 for entry in working_list:
-    print(f">> {entry}")
     executions = entry['executions']
     for execution in executions:
         execution_id = execution['executionId']
@@ -453,7 +471,6 @@ for execution in execution_results:
     # > 3000ms = poor (-15 points)
     #
     # Be great to get number of objects loaded split by type (JS vs. CSS vs. Images etc.)
-    
     points = 100
 
     status = execution["fullResults"]["status"]
@@ -466,7 +483,7 @@ for execution in execution_results:
         score_reduction_reasons = []
 
         is_insecure = False
-        if step["requestName"].startswith("http://") or step["peerCertificateDetails"] == "":
+        if step_name.startswith("http://") or step["peerCertificateDetails"] == "":
             print(f"{step['requestName']} is insecure")
             is_insecure = True
 
@@ -487,6 +504,7 @@ for execution in execution_results:
         time_now = datetime.datetime.now()
         # Calculate days between now and cert_expiry
         cert_days_remaining = (cert_expiry - time_now).days
+        #print(f"Time Now: {time_now}. Expiry time: {cert_expiry}. Delta: {cert_days_remaining}")
 
         # Deduct points
         # Insecure page (http)
@@ -497,7 +515,7 @@ for execution in execution_results:
 
         # Missing or error pages
         if step_response_status_code > RESPONSE_CODE_THRESHOLD:
-            score_reduction_reasons.append(f"Removing {RESPONSE_CODE_POINT_DEDUCTION} points from {step_name} because response status > {RESPONSE_CODE_THRESHOLD}")
+            score_reduction_reasons.append(f"Removing {RESPONSE_CODE_POINT_DEDUCTION} points because response status > {RESPONSE_CODE_THRESHOLD}")
             print(f"Removing {RESPONSE_CODE_POINT_DEDUCTION} points from {step_name} because response status > {RESPONSE_CODE_THRESHOLD}")
             points -= RESPONSE_CODE_POINT_DEDUCTION
 
@@ -528,10 +546,12 @@ for execution in execution_results:
         # Can"t have negative points
         if points < 0: points = 0
         
+
         print(f"Points: {points}")
 
+        #print(f"{step['requestName']} had status: {status} ({step_response_status_code}) and was {step['healthStatus']}")
         results.append({
-            "url": f"{step_name}",
+            "url": f"{step['requestName']}",
             "score": points,
             "reasons": score_reduction_reasons
         })
