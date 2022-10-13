@@ -16,6 +16,10 @@ https://google.com
 ## Create Required Secrets
 Create 2x GitHub secrets called `DT_ENVIRONMENT_URL` and `DT_API_TOKEN`.
 
+Where
+- `DT_ENVIRONMENT_URL` looks like: `https://abc12345.live.dynatrace.com`
+- `DT_ENVIRONMENT_URL` looks like: `dtc01.*****.*****`
+
 API Token needs these permissions:
 - `entities.read (Read entities)`
 - `ExternalSyntheticIntegration (Create and read synthetic monitors, locations, and nodes)`
