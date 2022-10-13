@@ -52,13 +52,15 @@ Alternatively, place [valid sitemap.xml file(s)](https://developers.google.com/s
 OpenAPI support is a work in progress.
 
 ## Add Action
+Create a workflow in `.github/workflows/dynatrace-endpoint-checker.yml`
+
 ```
 on: [push, pull_request]
 
 jobs:
   dt_job:
     runs-on: ubuntu-latest
-    name: DT job
+    name: "Check Endpoints with Dynatrace"
     steps:
       # Checkout the repo to the runner
       # This step is mandatory
@@ -81,6 +83,10 @@ jobs:
           comment_includes: "## Endpoint Results" # Overwrites existing comments (if any). If nothing exists, adds new comment
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
+
+## Create a PR
+1) Create a new branch and make whatever code changes you require to your code.
+2) Create a new PR and the workflow should automatically trigger.
 
 # Contributing
 
