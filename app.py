@@ -443,7 +443,7 @@ for entry in working_list:
         # Now we have an execution result. Good or bad we don't know yet
         execution_results.append(execution_details_response_json)
     
-    print(f"Got results for {execution_id}. Moving onto the next execution...")
+        print(f"Got results for {execution_id}. Moving onto the next execution...")
 
 print("=================================================================================")
 print(f"All done. Got {len(execution_results)} execution results. Processing them now...")
