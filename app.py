@@ -114,7 +114,7 @@ try:
     with open(f"{directory_to_scan}/{config_file_name}") as config_file:
       config_file_json = json.load(config_file)
 except:
-    print(f"{directory_to_scan}/{config_file_name} is missing or empty. .dynatrace/config.json must exist and have defaultRootURL and a defaultLocations array. Cannot proceed. Please fix. Exiting...")
+    print(f"{directory_to_scan}/{config_file_name} is missing or empty. .dynatrace/config.json must exist and have defaultRootUrl and a defaultLocations array. Cannot proceed. Please fix. Exiting...")
     exit(1)
 
 try:
