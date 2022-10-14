@@ -89,6 +89,24 @@ jobs:
 ## Create a PR
 1) Create a new branch and make whatever code changes you require to your code.
 2) Create a new PR and the workflow should automatically trigger.
+3) Adjust the URLs as often as you want in the `.dynatrace` folder. The PR comment will be updated (avoids PR spam)
+
+
+## Scoring Rules / Logic
+
+Note: If you are looking for a more fully featured page / build / artifact scoring system, I recommend [Keptn](https://keptn.sh).
+
+Every endpoint starts at `100%` (perfect score). The lowest score possible is obviously zero.
+
+The response time
+
+- `-100%`: If a page is missing or has a server-side error (ie. a `4xx` or `5xx` response)
+- `-80%`: If page is server over `http` rather than `https`
+- `-20%`: If certificate is due to become invalid within `30` days
+- `-10%`: If time to first byte (TTFB) is over 800ms
+- `-15%`: If time to first byte (TTFB) is over 1800ms
+
+If you would like to adjust rules or suggest new ones, please [open an issue](https://github.com/agardnerIT/dynatrace-endpoint-evaluator/issues/new) or PR.
 
 # Contributing
 
