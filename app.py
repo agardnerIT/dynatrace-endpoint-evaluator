@@ -33,9 +33,43 @@ def ensure_full_url(input):
     else:
         return default_root_url+input
 
+# Used in special cases if the URL input is a link to a file
+# Currently supported: sitemap.xml files
+# Download the URL content and parse each URL inside the sitemap.xml
+# Meaning we allow users to list https://example.com/sitemap.xml inside the .dynatrace/urls.txt
+# Then the <loc> URLs INSIDE the sitemap will actually also be checked
+def unpack_and_parse_url(url):
+    url_return_list = []
+    # Currently only supports https://example.com/sitemap.xml type URLs
+    if not url.endswith("sitemap.xml"): return url_return_list
+    try:
+        url_response = requests.get(url)
+    except:
+        print(f"Exception caught unpacking {url}. Exit safely.")
+        return url_return_list
+    
+    if url_response.status_code != 200:
+        return url_return_list
+
+    sitemap_xml_content = url_response.text
+    sitemap_json = xmltodict.parse(sitemap_xml_content)
+
+    # Valid sitemap.xml will have an array of url objects inside the urlset
+    if "urlset" in sitemap_json and "url" in sitemap_json['urlset']:
+        urls = sitemap_json['urlset']['url']
+        for url in urls:
+            # <loc> is the standard tag for an URL
+            # Add to master list
+            full_url = ensure_full_url(url['loc'])
+            url_return_list.append(full_url)
+    
+    return url_return_list
+
+
 def parse(filename):
 
     root_url = default_root_url # Could be overriden by servers block
+    url_return_list = []
 
     # Google supported .txt file sitemap format
     # One URL per line
@@ -46,8 +80,9 @@ def parse(filename):
             url_list = data.splitlines()
             for url in url_list:
                 # Add to master list...
-                url_string_list.append(ensure_full_url(url))
+                url_return_list.append(ensure_full_url(url))
     # sitemap.xml parsing
+    # This logic is used if a sitemap.xml file is physically placed in the repo
     # https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap#xml
     elif filename.endswith(".xml"):
         with open(filename) as xml_file:
@@ -59,7 +94,7 @@ def parse(filename):
                 for url in urls:
                     # <loc> is the standard tag for an URL
                     # Add to master list
-                    url_string_list.append(ensure_full_url(url['loc']))
+                    url_return_list.append(ensure_full_url(url['loc']))
     # Could be OpenAPI or Dynatrace endpoints.json format
     elif filename.endswith(".json"):
         with open(filename) as json_file:
@@ -82,7 +117,7 @@ def parse(filename):
             
                 for path in paths_available:
                     # Add to master list
-                    url_string_list.append(ensure_full_url(path))
+                    url_return_list.append(ensure_full_url(path))
 
                     path_full_info = json_file['paths'][path]
                     path_supported_http_method = path_full_info.keys()
@@ -96,10 +131,12 @@ def parse(filename):
                 # Then add to master list
                 for path in json_file['paths']:
                     #url += path['path']
-                    url_string_list.append(ensure_full_url(path['path']))
+                    url_return_list.append(ensure_full_url(path['path']))
 
             else:
                 print(f"Parsing JSON file but {filename} is currently an unsupported format")
+    
+    return url_return_list
 
 
 ####################
@@ -139,13 +176,25 @@ file_list = os.scandir(directory_to_scan)
 url_string_list = []
 
 for file_or_dir in file_list:
-    if os.path.isfile(file_or_dir.path) and config_file_name not in file_or_dir.path: parse(file_or_dir.path)
+    if os.path.isfile(file_or_dir.path) and config_file_name not in file_or_dir.path: url_string_list = parse(file_or_dir.path)
+
+# It is possible that a user has listed a sitemap.xml in the url_string_list
+# This should be "unpacked" to test not only the existence of the sitemap.xml itself but also all URLs
+# given in the sitemap.xml
+sitemap_urls_to_append = []
+
+for url in url_string_list:
+    if (url.endswith("sitemap.xml")):
+        sitemap_urls_to_append = unpack_and_parse_url(url)
+
+# Add any URLS from the unpacked sitemap.xml to the main list
+url_string_list.extend(sitemap_urls_to_append)
 
 # Create a dictionary, using the List items as keys.
 # This will automatically remove any duplicates because dictionaries cannot have duplicate keys.
 url_string_list = list( dict.fromkeys(url_string_list) )
 
-print(f"Will test the following URLs: {url_string_list}")
+print(f"Will check these URLs: {url_string_list}")
 
 # Test URLs
 # Just because the URLs are in the "to test" list, doesn't mean
@@ -165,10 +214,15 @@ headers = {
 }
 entity_selector = "type(HTTP_CHECK),tag(git-action)"
 
-get_existing_synthetics_response = requests.get(
-    url=f"{dt_environment_url}/api/v2/entities?entitySelector={entity_selector}",
-    headers=headers
-)
+try:
+    get_existing_synthetics_response = requests.get(
+        url=f"{dt_environment_url}/api/v2/entities?entitySelector={entity_selector}",
+        headers=headers
+    )
+except:
+    print("Exception caught retrieving existing synthetics. Please check your DT_ENVIRONMENT_URL value. Cannot proceeed. Exiting.")
+    exit(1)
+
 if get_existing_synthetics_response.status_code != 200:
     print("Couldn't get existing synthetics. Check your dt_environment_url and dt_api_token permissions. Cannot proceed. Exiting")
     exit(1)
@@ -178,10 +232,10 @@ existing_synthetics_json = get_existing_synthetics_response.json()
 existing_synthetics = existing_synthetics_json['entities']
 
 for existing_synthetic_http_check in existing_synthetics:
-    print(existing_synthetic_http_check)
+    print(f"Existing tagged monitor: {existing_synthetic_http_check}")
     monitor_id = existing_synthetic_http_check['entityId']
     existing_name = existing_synthetic_http_check['displayName']
-    print(existing_name)
+
     if existing_name in url_string_list:
         print("Got a match. Do not need to recreate but do make a record of the monitor_id")
         found_item = [item for item in working_list if item['endpoint'] == existing_name][0]
@@ -255,17 +309,22 @@ for to_be_created in to_be_created_items:
 	    "requests": []
     }
 
-    create_synthetic_response = requests.post(
-        url=f"{dt_environment_url}/api/v1/synthetic/monitors",
-        headers=headers,
-        json=body
-    )
-    print(f"Creating synthetic: {to_be_created['endpoint']}")
-    print(create_synthetic_response.status_code)
-    print(create_synthetic_response.text)
+    try:
+        create_synthetic_response = requests.post(
+            url=f"{dt_environment_url}/api/v1/synthetic/monitors",
+            headers=headers,
+            json=body
+        )
+    except:
+        print("Exception caught creating new synthetics. Response code: {create_synthetic_response.status_code}. Text: {create_synthetic_response.text}. Cannot proceed. Exiting.")
+        exit(1)
+        
+        print(f"Creating synthetic: {to_be_created['endpoint']}")
+        print(create_synthetic_response.status_code)
+        print(create_synthetic_response.text)
 
     if create_synthetic_response.status_code != 200:
-        print(f"Creation of synthetics failed. Response code: {create_synthetic_response.status_code}. Exiting.")
+        print(f"Creation of synthetics failed. Response code: {create_synthetic_response.status_code}. Text: {create_synthetic_response.text}. Exiting.")
         exit(1)
 
     create_synthetic_response_json = create_synthetic_response.json()
@@ -304,12 +363,16 @@ body = {
     "monitors": monitors_to_trigger,
     "group": {}
 }
-    
-batch_execution_response = requests.post(
-    url=f"{dt_environment_url}/api/v2/synthetic/executions/batch",
-    headers=headers,
-    json=body
-)
+
+try:
+    batch_execution_response = requests.post(
+        url=f"{dt_environment_url}/api/v2/synthetic/executions/batch",
+        headers=headers,
+        json=body
+    )
+except:
+    print("Exception caught triggering batch execution. Cannot proceed. Exiting.")
+    exit(1)
 print(f"Batch Trigger Response Code: {batch_execution_response.status_code}")
 
 batch_response_json = batch_execution_response.json()
@@ -327,23 +390,34 @@ while True:
     if must_retrigger_batch:
         must_retrigger_batch = False
         print(f"Retriggering batch (a new batch ID will be generated)...")
-        batch_execution_response = requests.post(
-            url=f"{dt_environment_url}/api/v2/synthetic/executions/batch",
-            headers=headers,
-            json=body
-        )
+        try:
+            batch_execution_response = requests.post(
+                url=f"{dt_environment_url}/api/v2/synthetic/executions/batch",
+                headers=headers,
+                json=body
+            )
+        except:
+            print("Exception caught retriggering batch execution. Cannot proceed. Exiting.")
+            exit(1)
+
         batch_response_json = batch_execution_response.json()
         print(f"Retriggered Batch Response JSON: {batch_response_json}")
         batch_id = batch_response_json['batchId']
         print(f"Batch Trigger Response Code: {batch_execution_response.status_code}")
 
         # Sleep for 30s after new batch trigger
-        time.sleep(30)    
+        time.sleep(30)
 
-    get_batch_response = requests.get(
-        url=f"{dt_environment_url}/api/v2/synthetic/executions/batch/{batch_id}",
-        headers=headers
-    )
+    try:
+        get_batch_response = requests.get(
+            url=f"{dt_environment_url}/api/v2/synthetic/executions/batch/{batch_id}",
+            headers=headers
+        )
+    except:
+        # Hmm, how do we know if this is a transient error or permanent failure?
+        # For now, just hard exit but this is not good logic.
+        print("Exception caught retrieving batch information.")
+        exit(1)
 
     get_batch_response_json = get_batch_response.json()
 
@@ -391,10 +465,14 @@ if batch_status == "FAILED" or batch_status == "FAILED_TO_EXECUTE":
 while batch_status == "RUNNING":
     print(f"Batch status is still RUNNING. Wait for it to finish.")
     time.sleep(10)
-    get_batch_response = requests.get(
-        url=f"{dt_environment_url}/api/v2/synthetic/executions/batch/{batch_id}",
-        headers=headers
-    )
+    try:
+        get_batch_response = requests.get(
+            url=f"{dt_environment_url}/api/v2/synthetic/executions/batch/{batch_id}",
+            headers=headers
+        )
+    except:
+        print("Exception caught getting batch response. Exiting.")
+        exit(1)
 
     get_batch_response_json = get_batch_response.json()
     batch_status = get_batch_response_json['batchStatus']
