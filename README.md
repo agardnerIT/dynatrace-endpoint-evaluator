@@ -7,7 +7,9 @@ https://www.dynatrace.com
 https://example.com
 http://example.com
 https://google.com
+https://example.com/sitemap.xml
 ```
+* URLs ending with `sitemap.xml` will be "unpacked" and thus include all URLs in the `<loc>` tag within the sitemap.
 
 ![](assets/screenshots/pr_screenshot.jpg)
 
@@ -68,7 +70,7 @@ jobs:
         uses: actions/checkout@v3
       
       - name: Dynatrace Endpoint Tester
-        uses: agardnerIT/dynatrace-endpoint-evaluator@0.1.7
+        uses: agardnerIT/dynatrace-endpoint-evaluator@0.1.8
         id: dt_job # Mandatory as this is how the comments are pushed to PR
         env:
           dt_environment_url: ${{ secrets.DT_ENVIRONMENT_URL }}
